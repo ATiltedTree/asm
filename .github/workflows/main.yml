@@ -60,7 +60,7 @@ jobs:
         uses: actions-rs/cargo@v1.0.3
         with:
           command: doc
-          args: --no-deps
+          args: --all-features --no-deps
   test:
     name: Test
     runs-on: ubuntu-latest
