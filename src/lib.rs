@@ -17,8 +17,6 @@
 #![no_std]
 #![deny(missing_docs)]
 
-use core::fmt;
-
 mod arch;
 pub use arch::*;
 
@@ -49,8 +47,8 @@ impl Architecture {
 #[cfg(feature = "decode")]
 pub trait Decoder: Iterator<Item = Result<Self::Instruction, Self::Error>> {
     /// The instruction produced by this decoder
-    type Instruction: fmt::Debug;
+    type Instruction: core::fmt::Debug;
 
     /// Errors produced during decoding
-    type Error: fmt::Debug;
+    type Error: core::fmt::Debug;
 }
