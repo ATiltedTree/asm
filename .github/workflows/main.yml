@@ -1,0 +1,79 @@
+name: Main
+on:
+  pull_request:
+  push:
+    branches:
+      - staging
+      - trying
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup | Checkout
+        uses: actions/checkout@v2.4.0
+      - name: Setup | Rust
+        uses: actions-rs/toolchain@v1.0.7
+        with:
+          toolchain: stable
+          override: true
+          profile: minimal
+          components: rustfmt
+      - name: Check | Format
+        run: cargo fmt --all -- --check
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup | Checkout
+        uses: actions/checkout@v2.4.0
+      - name: Setup | Rust
+        uses: actions-rs/toolchain@v1.0.7
+        with:
+          toolchain: stable
+          override: true
+          profile: minimal
+          components: clippy
+      - name: Setup | Cache
+        uses: Swatinem/rust-cache@v1
+      - name: Check | Lint
+        uses: actions-rs/cargo@v1.0.3
+        with:
+          command: clippy
+          args: --all-targets --all-features
+  doc:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup | Checkout
+        uses: actions/checkout@v2.4.0
+      - name: Setup | Rust
+        uses: actions-rs/toolchain@v1.0.7
+        with:
+          toolchain: stable
+          override: true
+          profile: minimal
+      - name: Setup | Cache
+        uses: Swatinem/rust-cache@v1
+      - name: Check | Doc
+        uses: actions-rs/cargo@v1.0.3
+        with:
+          command: doc
+          args: --no-deps
+  test:
+    name: Test
+    needs: check # Check first then run test
+    steps:
+      - name: Setup | Checkout
+        uses: actions/checkout@v2.4.0
+      - name: Setup | Rust
+        uses: actions-rs/toolchain@v1.0.7
+        with:
+          toolchain: stable
+          override: true
+          profile: minimal
+      - name: Setup | Cache
+        uses: Swatinem/rust-cache@v1
+      - name: Build | Test
+        run: cargo test --all-features

@@ -1,0 +1,17 @@
+[package]
+name = "asm"
+version = "0.1.0"
+edition = "2021"
+description = "A Rust library for decoding and encoding assembly of various architectures"
+repository = "https://github.com/ATiltedTree/asm"
+license = "MIT OR Apache-2.0"
+keywords = ["assembly", "asm"]
+categories = ["embedded", "encoding", "no-std"]
+include = ["LICENSE-*", "src", "Cargo.toml", "README.md"]
+
+[features]
+decode = []
+encode = []
+
+[dependencies]
+bitflags = "1"
