@@ -233,6 +233,7 @@ pub enum Addressing {
     IndirectIndexed(u8),
 }
 
+#[cfg_attr(not(feature = "decode"), allow(dead_code))]
 impl Addressing {
     /// The length a Instruction Argument takes in bytes.
     pub fn length(&self) -> usize {
@@ -311,8 +312,10 @@ pub enum Error {
 }
 
 /// A decoder for 6502 instructions
+#[cfg(feature = "decode")]
 pub struct Decoder<T: Iterator<Item = u8>>(T, bool);
 
+#[cfg(feature = "decode")]
 impl<T: Iterator<Item = u8>> Decoder<T> {
     /// Create a new encoder from a byte stream
     pub fn new(inner: T) -> Self {
@@ -320,6 +323,7 @@ impl<T: Iterator<Item = u8>> Decoder<T> {
     }
 }
 
+#[cfg(feature = "decode")]
 impl<T: Iterator<Item = u8>> super::super::Decoder for Decoder<T> {
     type Instruction = Instruction;
     type Error = Error;
@@ -336,6 +340,7 @@ macro_rules! inst {
             $($(#[doc = $doc])* $name(Addressing)),+
         }
 
+        #[cfg(feature = "decode")]
         impl<T: Iterator<Item = u8>> Iterator for Decoder<T> {
             type Item = Result<Instruction, Error>;
 
