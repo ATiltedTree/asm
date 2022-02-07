@@ -18,7 +18,7 @@ jobs:
           profile: minimal
           override: true
       - name: Build | Publish
-        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+        run: cargo publish --all-features --token ${{ secrets.CRATES_IO_TOKEN }}
   github:
     name: Create GitHub Release
     runs-on: ubuntu-latest
