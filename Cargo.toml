@@ -9,6 +9,9 @@ keywords = ["assembly", "asm"]
 categories = ["embedded", "encoding", "no-std"]
 include = ["LICENSE-*", "src", "Cargo.toml", "README.md"]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 decode = []
 encode = []
