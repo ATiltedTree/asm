@@ -15,6 +15,7 @@ all-features = true
 [features]
 decode = []
 encode = []
+6502 = []
 
 [dependencies]
 bitflags = "1"
