@@ -5,23 +5,29 @@
 //! ## Decode `6502` assembly
 //!
 //! ```
+//! # use asm::{_6502, Decoder};
 //! let assembly = [0x65, 0x83, 0x31];
 //!
-//! let decoder = asm::Architecture::_6502.decoder(assembly.into_iter());
+//! let mut decoder = _6502::Decoder::new(&assembly[..]);
 //!
-//! for instruction in decoder {
-//!     println!("{:?}", instruction);
-//! }
+//! println!("{:?}", decoder.decode())
+//! ```
+//!
+//! ## Encode `6502` assembly
+//!
+//! ```rust
+//! # use asm::{_6502, Encoder};
+//! let mut assembly = [0u8; 1];
+//!
+//! let mut encoder = _6502::Encoder::new(&mut assembly[..]);
+//!
+//! encoder.encode(_6502::Instruction::BRK(_6502::Addressing::Implied(())));
 //! ```
 
-#![no_std]
 #![deny(missing_docs)]
 
 mod arch;
 pub use arch::*;
-
-#[cfg(not(any(feature = "6502")))]
-compile_error!("At least one architecture needs to be enabled");
 
 /// Architectures known by this crate
 #[non_exhaustive]
@@ -32,23 +38,55 @@ pub enum Architecture {
     _6502,
 }
 
-impl Architecture {
-    /// Create a decoder for this architecture.
-    #[cfg(feature = "decode")]
-    pub fn decoder(&self, it: impl Iterator<Item = u8>) -> impl Decoder {
-        match self {
-            #[cfg(feature = "6502")]
-            Self::_6502 => _6502::Decoder::new(it),
+#[cfg(feature = "decode")]
+#[doc(inline)]
+pub use decode::Decoder;
+
+/// Decoder related things
+#[cfg(feature = "decode")]
+pub mod decode {
+    /// A instruction decoder
+    pub trait Decoder {
+        /// The instruction produced by this decoder
+        type Instruction: core::fmt::Debug;
+
+        /// Errors produced during decoding
+        type Error: core::fmt::Debug + std::error::Error;
+
+        /// Decode a instruction
+        fn decode(&mut self) -> Option<Result<Self::Instruction, Self::Error>>;
+
+        /// Turn this decoder into a [`Iterator`] yielding `Result<Self::Instruction, Self::Error>`
+        fn into_iter(self) -> Iter<Self>
+        where
+            Self: Sized,
+        {
+            Iter(self)
+        }
+    }
+
+    /// A [`Decoder`] as [`Iterator`]
+    /// See [`Decoder::into_iter`] for more info
+    pub struct Iter<D>(D);
+
+    impl<D: Decoder> Iterator for Iter<D> {
+        type Item = Result<D::Instruction, D::Error>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.0.decode()
         }
     }
 }
 
-/// A instruction decoder
-#[cfg(feature = "decode")]
-pub trait Decoder: Iterator<Item = Result<Self::Instruction, Self::Error>> {
+/// A instruction encoder
+#[cfg(feature = "encode")]
+pub trait Encoder {
     /// The instruction produced by this decoder
     type Instruction: core::fmt::Debug;
 
     /// Errors produced during decoding
-    type Error: core::fmt::Debug;
+    type Error: core::fmt::Debug + std::error::Error;
+
+    /// Encode a instruction
+    fn encode(&mut self, inst: Self::Instruction) -> Result<(), Self::Error>;
 }

@@ -19,3 +19,4 @@ encode = []
 
 [dependencies]
 bitflags = "1"
+thiserror = "1.0.30"
