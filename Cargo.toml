@@ -12,6 +12,7 @@ include = ["LICENSE-*", "src", "Cargo.toml", "README.md"]
 [features]
 decode = []
 encode = []
+6502 = []
 
 [dependencies]
 bitflags = "1"
