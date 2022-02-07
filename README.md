@@ -25,14 +25,26 @@ features = ["6502"]
 
 ## Example
 
+### Decoding
+
 ```rust
-let assembly = [...];
+use asm::{_6502, Decoder};
+let assembly = [0x65, 0x83, 0x31];
 
-let decoder = asm::Architecture::_6502::decoder(&assembly);
+let mut decoder = _6502::Decoder::new(&assembly[..]);
 
-for instruction in decoder {
-    println!("{:?}", instruction);
-}
+println!("{:?}", decoder.decode())
+```
+
+### Encoding
+
+```rust
+use asm::{_6502, Encoder};
+let mut assembly = [0u8; 1];
+
+let mut encoder = _6502::Encoder::new(&mut assembly[..]);
+
+encoder.encode(_6502::Instruction::BRK(_6502::Addressing::Implied(())));
 ```
 
 #### License
