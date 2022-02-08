@@ -45,6 +45,8 @@ pub use decode::Decoder;
 /// Decoder related things
 #[cfg(feature = "decode")]
 pub mod decode {
+    use std::io::SeekFrom;
+
     /// A instruction decoder
     pub trait Decoder {
         /// The instruction produced by this decoder
@@ -63,6 +65,12 @@ pub mod decode {
         {
             Iter(self)
         }
+    }
+
+    /// [`Seek`] support for a [`Decoder`]
+    pub trait Seek: Decoder {
+        /// Seek to an offest, in bytes, in a stream.
+        fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Error>;
     }
 
     /// A [`Decoder`] as [`Iterator`]

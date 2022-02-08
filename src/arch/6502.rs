@@ -728,7 +728,7 @@ macro_rules! implementation {
         #[cfg(feature = "decode")]
         mod decode {
             use super::*;
-            use std::io::Read;
+            use std::io::{Read, Seek, SeekFrom};
             /// A decoder for 6502 instructions
             pub struct Decoder<T: Read>(T, bool);
 
@@ -769,6 +769,12 @@ macro_rules! implementation {
                     };
                     Some(inst)
 
+                }
+            }
+
+            impl<T: Read + Seek> crate::decode::Seek for Decoder<T> {
+                fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
+                    self.0.seek(pos).map_err(Error::IO)
                 }
             }
         }
