@@ -70,7 +70,12 @@ pub mod decode {
     /// [`Seek`] support for [`Decode`]
     pub trait Seek: Decode {
         /// Seek to an offest, in bytes, in a stream.
-        fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Error>;
+        fn seek_bytes(&mut self, pos: SeekFrom) -> Result<u64, Self::Error>;
+
+        /// Seek to an offest, in instructions, in a stream.
+        ///
+        /// May be more expensive than `seek_bytes` depending on the architecture.
+        fn seek_insts(&mut self, pos: SeekFrom) -> Result<u64, Self::Error>;
     }
 
     /// A Decoder as [`Iterator`]

@@ -773,7 +773,12 @@ macro_rules! implementation {
             }
 
             impl<T: Read + Seek> crate::decode::Seek for Decoder<T> {
-                fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
+                fn seek_bytes(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
+                    self.0.seek(pos).map_err(Error::IO)
+                }
+
+                fn seek_insts(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
+                    // Instructions are always one byte in length, just pass the seek through
                     self.0.seek(pos).map_err(Error::IO)
                 }
             }
