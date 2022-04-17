@@ -5,7 +5,7 @@
 //! ## Decode `6502` assembly
 //!
 //! ```
-//! # use asm::{_6502, Decoder};
+//! # use asm::{_6502, Decode};
 //! let assembly = [0x65, 0x83, 0x31];
 //!
 //! let mut decoder = _6502::Decoder::new(&assembly[..]);
@@ -15,8 +15,8 @@
 //!
 //! ## Encode `6502` assembly
 //!
-//! ```rust
-//! # use asm::{_6502, Encoder};
+//! ```
+//! # use asm::{_6502, Encode};
 //! let mut assembly = [0u8; 1];
 //!
 //! let mut encoder = _6502::Encoder::new(&mut assembly[..]);
@@ -40,15 +40,15 @@ pub enum Architecture {
 
 #[cfg(feature = "decode")]
 #[doc(inline)]
-pub use decode::Decoder;
+pub use decode::Decode;
 
-/// Decoder related things
+/// Decode related things
 #[cfg(feature = "decode")]
 pub mod decode {
     use std::io::SeekFrom;
 
     /// A instruction decoder
-    pub trait Decoder {
+    pub trait Decode {
         /// The instruction produced by this decoder
         type Instruction: core::fmt::Debug;
 
@@ -67,17 +67,22 @@ pub mod decode {
         }
     }
 
-    /// [`Seek`] support for a [`Decoder`]
-    pub trait Seek: Decoder {
+    /// [`Seek`] support for [`Decode`]
+    pub trait Seek: Decode {
         /// Seek to an offest, in bytes, in a stream.
-        fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Error>;
+        fn seek_bytes(&mut self, pos: SeekFrom) -> Result<u64, Self::Error>;
+
+        /// Seek to an offest, in instructions, in a stream.
+        ///
+        /// May be more expensive than `seek_bytes` depending on the architecture.
+        fn seek_insts(&mut self, pos: SeekFrom) -> Result<u64, Self::Error>;
     }
 
-    /// A [`Decoder`] as [`Iterator`]
-    /// See [`Decoder::into_iter`] for more info
+    /// A Decoder as [`Iterator`]
+    /// See [`Decode::into_iter`] for more info
     pub struct Iter<D>(D);
 
-    impl<D: Decoder> Iterator for Iter<D> {
+    impl<D: Decode> Iterator for Iter<D> {
         type Item = Result<D::Instruction, D::Error>;
 
         fn next(&mut self) -> Option<Self::Item> {
@@ -88,7 +93,7 @@ pub mod decode {
 
 /// A instruction encoder
 #[cfg(feature = "encode")]
-pub trait Encoder {
+pub trait Encode {
     /// The instruction produced by this decoder
     type Instruction: core::fmt::Debug;
 
