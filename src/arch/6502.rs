@@ -739,7 +739,7 @@ macro_rules! implementation {
                 }
             }
 
-            impl<T: Read> crate::Decoder for Decoder<T> {
+            impl<T: Read> crate::Decode for Decoder<T> {
                 type Instruction = Instruction;
                 type Error = Error;
 
@@ -794,7 +794,7 @@ macro_rules! implementation {
                 }
             }
 
-            impl<T: std::io::Write> crate::Encoder for Encoder<T> {
+            impl<T: std::io::Write> crate::Encode for Encoder<T> {
                 type Instruction = Instruction;
 
                 type Error = Error;
