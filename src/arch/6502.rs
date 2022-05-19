@@ -242,8 +242,6 @@ pub enum Addressing {
     IndirectIndexed(u8),
 }
 
-#[cfg_attr(not(feature = "decode"), allow(dead_code))]
-#[cfg_attr(not(feature = "encode"), allow(dead_code))]
 impl Addressing {
     /// The length a Instruction Argument takes in bytes.
     pub fn length(&self) -> usize {
@@ -723,9 +721,7 @@ inst! {
 
 macro_rules! implementation {
     ($($op:literal => $inst:ident($dec:ident, $enc:ident)),+,) => {
-        #[cfg(feature = "decode")]
         pub use decode::Decoder;
-        #[cfg(feature = "decode")]
         mod decode {
             use super::*;
             use std::io::{Read, Seek, SeekFrom};
@@ -784,9 +780,7 @@ macro_rules! implementation {
             }
         }
 
-        #[cfg(feature = "encode")]
         pub use encode::Encoder;
-        #[cfg(feature = "encode")]
         mod encode {
             use super::*;
             /// A encoder for 6502 instructions

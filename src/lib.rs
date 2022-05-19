@@ -38,12 +38,10 @@ pub enum Architecture {
     _6502,
 }
 
-#[cfg(feature = "decode")]
 #[doc(inline)]
 pub use decode::Decode;
 
 /// Decode related things
-#[cfg(feature = "decode")]
 pub mod decode {
     use std::io::SeekFrom;
 
@@ -92,7 +90,6 @@ pub mod decode {
 }
 
 /// A instruction encoder
-#[cfg(feature = "encode")]
 pub trait Encode {
     /// The instruction produced by this decoder
     type Instruction: core::fmt::Debug;

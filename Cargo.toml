@@ -14,8 +14,6 @@ rust-version = "1.56.0"
 all-features = true
 
 [features]
-decode = []
-encode = []
 6502 = []
 
 [dependencies]

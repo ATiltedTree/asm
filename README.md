@@ -9,10 +9,7 @@ Supported architectures currently include:
 
 ## Cargo Features
 
-- `encode` allows for encoding of instructions
-- `decode` allows for decoding of instructions
-
-In addition every architecture has a feature. This allows you to only enable the
+Every architecture has a feature. This allows you to only enable the
 architectures you need.
 
 For example `6502` support would be enabled by adding this to your `Cargo.toml`:
