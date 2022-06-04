@@ -54,14 +54,15 @@ pub mod decode {
         type Error: core::fmt::Debug + std::error::Error;
 
         /// Decode a instruction
-        fn decode(&mut self) -> Option<Result<Self::Instruction, Self::Error>>;
+        fn decode(&mut self) -> Result<Self::Instruction, Self::Error>;
 
-        /// Turn this decoder into a [`Iterator`] yielding `Result<Self::Instruction, Self::Error>`
+        /// Turn this decoder into a [`Iterator`] yielding Instructions. Errors are
+        /// discarded. Once it returns `None`, it will always return `None`.
         fn into_iter(self) -> Iter<Self>
         where
             Self: Sized,
         {
-            Iter(self)
+            Iter(Some(self))
         }
     }
 
@@ -78,13 +79,22 @@ pub mod decode {
 
     /// A Decoder as [`Iterator`]
     /// See [`Decode::into_iter`] for more info
-    pub struct Iter<D>(D);
+    pub struct Iter<D>(Option<D>);
 
     impl<D: Decode> Iterator for Iter<D> {
-        type Item = Result<D::Instruction, D::Error>;
+        type Item = D::Instruction;
 
         fn next(&mut self) -> Option<Self::Item> {
-            self.0.decode()
+            match self.0 {
+                Some(ref mut x) => match x.decode() {
+                    Ok(item) => Some(item),
+                    Err(_) => {
+                        self.0 = None;
+                        None
+                    }
+                },
+                None => None,
+            }
         }
     }
 }
