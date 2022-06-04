@@ -3,7 +3,7 @@
 //! Based on the information from:
 //! <https://www.nesdev.org/obelisk-6502-guide/index.html>
 
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom, Write};
 
 macro_rules! consume {
     ($reader:ident, $size:literal) => {{
@@ -172,11 +172,11 @@ pub enum Addressing {
     /// For many 6502 instructions the source and destination of the information
     /// to be manipulated is implied directly by the function of the instruction
     /// itself and no further operand needs to be specified.
-    Implied(()),
+    Implied,
 
     /// Some instructions have an option to operate directly upon the
     /// accumulator.
-    Accumulator(()),
+    Accumulator,
 
     /// Immediate addressing allows the programmer to directly specify an 8 bit
     /// constant within the instruction.
@@ -246,7 +246,7 @@ impl Addressing {
     /// The length a Instruction Argument takes in bytes.
     pub fn length(&self) -> usize {
         match self {
-            Addressing::Implied(()) | Addressing::Accumulator(()) => 0,
+            Addressing::Implied | Addressing::Accumulator => 0,
             Addressing::Immediate(_)
             | Addressing::ZeroPage(_)
             | Addressing::ZeroPageX(_)
@@ -263,7 +263,7 @@ impl Addressing {
 
     fn encode(self, writer: &mut impl std::io::Write) -> Result<(), Error> {
         match self {
-            Addressing::Implied(()) | Addressing::Accumulator(()) => Ok(()),
+            Addressing::Implied | Addressing::Accumulator => Ok(()),
             Addressing::Immediate(imm)
             | Addressing::ZeroPage(imm)
             | Addressing::ZeroPageX(imm)
@@ -279,10 +279,10 @@ impl Addressing {
     }
 
     fn implied(_: &mut impl Read) -> Result<Self, Error> {
-        Ok(Self::Implied(()))
+        Ok(Self::Implied)
     }
     fn accumulator(_: &mut impl Read) -> Result<Self, Error> {
-        Ok(Self::Accumulator(()))
+        Ok(Self::Accumulator)
     }
 
     fn immediate(it: &mut impl Read) -> Result<Self, Error> {
@@ -719,157 +719,139 @@ inst! {
     TYA,
 }
 
+/// A decoder for 6502 instructions
+pub struct Decoder<T: Read>(T);
+
+impl<T: Read> Decoder<T> {
+    /// Create a new decoder from a byte stream
+    pub fn new(inner: T) -> Self {
+        Self(inner)
+    }
+}
+impl<T: Read> crate::Decode for Decoder<T> {
+    type Instruction = Instruction;
+    type Error = Error;
+
+    fn decode(&mut self) -> Result<Self::Instruction, Self::Error> {
+        let mut opcode = [0u8];
+        self.0.read_exact(&mut opcode).map_err(Error::IO)?;
+
+        op_to_inst(opcode[0], &mut self.0)
+    }
+}
+
+impl<T: Read + Seek> crate::decode::Seek for Decoder<T> {
+    fn seek_bytes(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
+        self.0.seek(pos).map_err(Error::IO)
+    }
+
+    fn seek_insts(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
+        // Instructions are always one byte in length, just pass the seek through
+        self.0.seek(pos).map_err(Error::IO)
+    }
+}
+
+/// A encoder for 6502 instructions
+pub struct Encoder<T: Write>(T);
+
+impl<T: Write> Encoder<T> {
+    /// Create a new encoder from a writer
+    pub fn new(inner: T) -> Self {
+        Self(inner)
+    }
+}
+
+impl<T: Write> crate::Encode for Encoder<T> {
+    type Instruction = Instruction;
+    type Error = Error;
+
+    fn encode(&mut self, inst: Self::Instruction) -> Result<(), Self::Error> {
+        inst_to_op(inst, &mut self.0)
+    }
+}
+
 macro_rules! implementation {
-    ($($op:literal => $inst:ident($dec:ident, $enc:ident)),+,) => {
-        pub use decode::Decoder;
-        mod decode {
-            use super::*;
-            use std::io::{Read, Seek, SeekFrom};
-            /// A decoder for 6502 instructions
-            pub struct Decoder<T: Read>(T, bool);
-
-            impl<T: Read> Decoder<T> {
-                /// Create a new decoder from a byte stream
-                pub fn new(inner: T) -> Self {
-                    Self(inner, false)
-                }
-            }
-
-            impl<T: Read> crate::Decode for Decoder<T> {
-                type Instruction = Instruction;
-                type Error = Error;
-
-                fn decode(&mut self) -> Option<Result<Self::Instruction, Self::Error>> {
-                    use std::io::ErrorKind;
-                    if self.1 == true {return None;}
-                    let mut opcode = [0u8];
-                    let res = self.0.read_exact(&mut opcode);
-                    if let Err(err) = res {
-                        // We reached the end. Stop the iterator with None.
-                        if err.kind() == ErrorKind::UnexpectedEof {
-                            return None;
-                        } else {
-                            // We got an error that is not EOF. Report it.
-                            return Some(Err(Error::IO(err)));
-                        }
-                    }
-
-                    let inst = match opcode[0] {
-                        $(
-                            $op => Addressing::$dec(&mut self.0).map(Instruction::$inst)
-                        ),+,
-                        x => {
-                            self.1 = true;
-                            Err(Error::InvalidOpcode(x))
-                        }
-                    };
-                    Some(inst)
-
-                }
-            }
-
-            impl<T: Read + Seek> crate::decode::Seek for Decoder<T> {
-                fn seek_bytes(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
-                    self.0.seek(pos).map_err(Error::IO)
-                }
-
-                fn seek_insts(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
-                    // Instructions are always one byte in length, just pass the seek through
-                    self.0.seek(pos).map_err(Error::IO)
-                }
+    ($($op:literal => $inst:ident($dec:ident, $enc:pat)),+,) => {
+        fn op_to_inst<R: Read>(op: u8, reader: &mut R) -> Result<Instruction, Error> {
+          match op {
+                $(
+                    $op => Addressing::$dec(reader).map(Instruction::$inst)
+                ),+,
+                x => Err(Error::InvalidOpcode(x)),
             }
         }
 
-        pub use encode::Encoder;
-        mod encode {
-            use super::*;
-            /// A encoder for 6502 instructions
-            pub struct Encoder<T: std::io::Write>(T);
-
-            impl<T: std::io::Write> Encoder<T> {
-                /// Create a new encoder from a writer
-                pub fn new(inner: T) -> Self {
-                    Self(inner)
-                }
-            }
-
-            impl<T: std::io::Write> crate::Encode for Encoder<T> {
-                type Instruction = Instruction;
-
-                type Error = Error;
-
-                fn encode(&mut self, inst: Self::Instruction) -> Result<(), Self::Error> {
-                    let op = match &inst {
-                        $(Instruction::$inst(Addressing::$enc(..)) => $op,)+
-                        other => return Err(Error::InvalidAddressing(*other)),
-                    };
-                    self.0.write_all(&[op]).map_err(Error::IO)?;
-                    inst.addressing().encode(&mut self.0)?;
-                    Ok(())
-                }
-            }
+        fn inst_to_op<W: Write>(inst: Instruction, writer: &mut W) -> Result<(), Error> {
+            use Addressing::*;
+            let op = match &inst {
+                $(Instruction::$inst($enc) => $op,)+
+                other => return Err(Error::InvalidAddressing(*other)),
+            };
+            writer.write_all(&[op]).map_err(Error::IO)?;
+            inst.addressing().encode(writer)?;
+            Ok(())
         }
     };
 }
 
 implementation! {
     // ADC
-    0x69 => ADC(immediate, Immediate),
-    0x65 => ADC(zero_page, ZeroPage),
-    0x75 => ADC(zero_page_x, ZeroPageX),
-    0x6D => ADC(absolute, Absolute),
-    0x7D => ADC(absolute_x, AbsoluteX),
-    0x79 => ADC(absolute_y, AbsoluteY),
-    0x61 => ADC(indexed_indirect, IndexedIndirect),
-    0x71 => ADC(indirect_indexed, IndirectIndexed),
+    0x69 => ADC(immediate, Immediate(..)),
+    0x65 => ADC(zero_page, ZeroPage(..)),
+    0x75 => ADC(zero_page_x, ZeroPageX(..)),
+    0x6D => ADC(absolute, Absolute(..)),
+    0x7D => ADC(absolute_x, AbsoluteX(..)),
+    0x79 => ADC(absolute_y, AbsoluteY(..)),
+    0x61 => ADC(indexed_indirect, IndexedIndirect(..)),
+    0x71 => ADC(indirect_indexed, IndirectIndexed(..)),
 
     // AND
-    0x29 => AND(immediate, Immediate),
-    0x25 => AND(zero_page, ZeroPage),
-    0x35 => AND(zero_page_x, ZeroPageX),
-    0x2D => AND(absolute, Absolute),
-    0x3D => AND(absolute_x, AbsoluteX),
-    0x39 => AND(absolute_y, AbsoluteY),
-    0x21 => AND(indexed_indirect, IndexedIndirect),
-    0x31 => AND(indirect_indexed, IndirectIndexed),
+    0x29 => AND(immediate, Immediate(..)),
+    0x25 => AND(zero_page, ZeroPage(..)),
+    0x35 => AND(zero_page_x, ZeroPageX(..)),
+    0x2D => AND(absolute, Absolute(..)),
+    0x3D => AND(absolute_x, AbsoluteX(..)),
+    0x39 => AND(absolute_y, AbsoluteY(..)),
+    0x21 => AND(indexed_indirect, IndexedIndirect(..)),
+    0x31 => AND(indirect_indexed, IndirectIndexed(..)),
 
     // ASL
     0x0A => ASL(accumulator, Accumulator),
-    0x06 => ASL(zero_page, ZeroPage),
-    0x16 => ASL(zero_page_x, ZeroPageX),
-    0x0E => ASL(absolute, Absolute),
-    0x1E => ASL(absolute_x, AbsoluteX),
+    0x06 => ASL(zero_page, ZeroPage(..)),
+    0x16 => ASL(zero_page_x, ZeroPageX(..)),
+    0x0E => ASL(absolute, Absolute(..)),
+    0x1E => ASL(absolute_x, AbsoluteX(..)),
 
     // BCC
-    0x90 => BCC(relative, Relative),
+    0x90 => BCC(relative, Relative(..)),
 
     // BCS
-    0xB0 => BCS(relative, Relative),
+    0xB0 => BCS(relative, Relative(..)),
 
     // BEQ
-    0xF0 => BEQ(relative, Relative),
+    0xF0 => BEQ(relative, Relative(..)),
 
     // BIT
-    0x24 => BIT(zero_page, ZeroPage),
-    0x2C => BIT(absolute, Absolute),
+    0x24 => BIT(zero_page, ZeroPage(..)),
+    0x2C => BIT(absolute, Absolute(..)),
 
     // BMI
-    0x30 => BMI(relative, Relative),
+    0x30 => BMI(relative, Relative(..)),
 
     // BNE
-    0xD0 => BNE(relative, Relative),
+    0xD0 => BNE(relative, Relative(..)),
 
     // BPL
-    0x10 => BPL(relative, Relative),
+    0x10 => BPL(relative, Relative(..)),
 
     // BRK
     0x00 => BRK(implied, Implied),
 
     // BVC
-    0x50 => BVC(relative, Relative),
+    0x50 => BVC(relative, Relative(..)),
 
     // BVS
-    0x70 => BVS(relative, Relative),
+    0x70 => BVS(relative, Relative(..)),
 
     // CLC
     0x18 => CLC(implied, Implied),
@@ -884,30 +866,30 @@ implementation! {
     0xB8 => CLV(implied, Implied),
 
     // CMP
-    0xC9 => CMP(immediate, Immediate),
-    0xC5 => CMP(zero_page, ZeroPage),
-    0xD5 => CMP(zero_page_x, ZeroPageX),
-    0xCD => CMP(absolute, Absolute),
-    0xDD => CMP(absolute_x, AbsoluteX),
-    0xD9 => CMP(absolute_y, AbsoluteY),
-    0xC1 => CMP(indirect_indexed, IndirectIndexed),
-    0xD1 => CMP(indexed_indirect, IndexedIndirect),
+    0xC9 => CMP(immediate, Immediate(..)),
+    0xC5 => CMP(zero_page, ZeroPage(..)),
+    0xD5 => CMP(zero_page_x, ZeroPageX(..)),
+    0xCD => CMP(absolute, Absolute(..)),
+    0xDD => CMP(absolute_x, AbsoluteX(..)),
+    0xD9 => CMP(absolute_y, AbsoluteY(..)),
+    0xC1 => CMP(indirect_indexed, IndirectIndexed(..)),
+    0xD1 => CMP(indexed_indirect, IndexedIndirect(..)),
 
     // CPX
-    0xE0 => CPX(immediate, Immediate),
-    0xE4 => CPX(zero_page, ZeroPage),
-    0xEC => CPX(absolute, Absolute),
+    0xE0 => CPX(immediate, Immediate(..)),
+    0xE4 => CPX(zero_page, ZeroPage(..)),
+    0xEC => CPX(absolute, Absolute(..)),
 
     // CPY
-    0xC0 => CPY(immediate, Immediate),
-    0xC4 => CPY(zero_page, ZeroPage),
-    0xCC => CPY(absolute, Absolute),
+    0xC0 => CPY(immediate, Immediate(..)),
+    0xC4 => CPY(zero_page, ZeroPage(..)),
+    0xCC => CPY(absolute, Absolute(..)),
 
     // DEC
-    0xC6 => DEC(zero_page, ZeroPage),
-    0xD6 => DEC(zero_page_x, ZeroPageX),
-    0xCE => DEC(absolute, Absolute),
-    0xDE => DEC(absolute_x, AbsoluteX),
+    0xC6 => DEC(zero_page, ZeroPage(..)),
+    0xD6 => DEC(zero_page_x, ZeroPageX(..)),
+    0xCE => DEC(absolute, Absolute(..)),
+    0xDE => DEC(absolute_x, AbsoluteX(..)),
 
     // DEX
     0xCA => DEX(implied, Implied),
@@ -916,20 +898,20 @@ implementation! {
     0x88 => DEY(implied, Implied),
 
     // EOR
-    0x49 => EOR(immediate, Immediate),
-    0x45 => EOR(zero_page, ZeroPage),
-    0x55 => EOR(zero_page_x, ZeroPageX),
-    0x4D => EOR(absolute, Absolute),
-    0x5D => EOR(absolute_x, AbsoluteX),
-    0x59 => EOR(absolute_y, AbsoluteY),
-    0x41 => EOR(indirect_indexed, IndirectIndexed),
-    0x51 => EOR(indexed_indirect, IndexedIndirect),
+    0x49 => EOR(immediate, Immediate(..)),
+    0x45 => EOR(zero_page, ZeroPage(..)),
+    0x55 => EOR(zero_page_x, ZeroPageX(..)),
+    0x4D => EOR(absolute, Absolute(..)),
+    0x5D => EOR(absolute_x, AbsoluteX(..)),
+    0x59 => EOR(absolute_y, AbsoluteY(..)),
+    0x41 => EOR(indirect_indexed, IndirectIndexed(..)),
+    0x51 => EOR(indexed_indirect, IndexedIndirect(..)),
 
     // INC
-    0xE6 => INC(zero_page, ZeroPage),
-    0xF6 => INC(zero_page_x, ZeroPageX),
-    0xEE => INC(absolute, Absolute),
-    0xFE => INC(absolute_x, AbsoluteX),
+    0xE6 => INC(zero_page, ZeroPage(..)),
+    0xF6 => INC(zero_page_x, ZeroPageX(..)),
+    0xEE => INC(absolute, Absolute(..)),
+    0xFE => INC(absolute_x, AbsoluteX(..)),
 
     // INX
     0xE8 => INX(implied, Implied),
@@ -938,55 +920,55 @@ implementation! {
     0xC8 => INY(implied, Implied),
 
     // JMP
-    0x4C => JMP(absolute, Absolute),
-    0x6C => JMP(indirect, Indirect),
+    0x4C => JMP(absolute, Absolute(..)),
+    0x6C => JMP(indirect, Indirect(..)),
 
     // JSR
-    0x20 => JSR(absolute, Absolute),
+    0x20 => JSR(absolute, Absolute(..)),
 
     // LDA
-    0xA9 => LDA(immediate, Immediate),
-    0xA5 => LDA(zero_page, ZeroPage),
-    0xB5 => LDA(zero_page_x, ZeroPageX),
-    0xAD => LDA(absolute, Absolute),
-    0xBD => LDA(absolute_x, AbsoluteX),
-    0xB9 => LDA(absolute_y, AbsoluteY),
-    0xA1 => LDA(indirect_indexed, IndirectIndexed),
-    0xB1 => LDA(indexed_indirect, IndexedIndirect),
+    0xA9 => LDA(immediate, Immediate(..)),
+    0xA5 => LDA(zero_page, ZeroPage(..)),
+    0xB5 => LDA(zero_page_x, ZeroPageX(..)),
+    0xAD => LDA(absolute, Absolute(..)),
+    0xBD => LDA(absolute_x, AbsoluteX(..)),
+    0xB9 => LDA(absolute_y, AbsoluteY(..)),
+    0xA1 => LDA(indirect_indexed, IndirectIndexed(..)),
+    0xB1 => LDA(indexed_indirect, IndexedIndirect(..)),
 
     // LDX
-    0xA2 => LDX(immediate, Immediate),
-    0xA6 => LDX(zero_page, ZeroPage),
-    0xB6 => LDX(zero_page_y, ZeroPageY),
-    0xAE => LDX(absolute, Absolute),
-    0xBE => LDX(absolute_y, AbsoluteY),
+    0xA2 => LDX(immediate, Immediate(..)),
+    0xA6 => LDX(zero_page, ZeroPage(..)),
+    0xB6 => LDX(zero_page_y, ZeroPageY(..)),
+    0xAE => LDX(absolute, Absolute(..)),
+    0xBE => LDX(absolute_y, AbsoluteY(..)),
 
     // LDY
-    0xA0 => LDY(immediate, Immediate),
-    0xA4 => LDY(zero_page, ZeroPage),
-    0xB4 => LDY(zero_page_x, ZeroPageX),
-    0xAC => LDY(absolute, Absolute),
-    0xBC => LDY(absolute_x, AbsoluteX),
+    0xA0 => LDY(immediate, Immediate(..)),
+    0xA4 => LDY(zero_page, ZeroPage(..)),
+    0xB4 => LDY(zero_page_x, ZeroPageX(..)),
+    0xAC => LDY(absolute, Absolute(..)),
+    0xBC => LDY(absolute_x, AbsoluteX(..)),
 
     // LSR
     0x4A => LSR(accumulator, Accumulator),
-    0x46 => LSR(zero_page, ZeroPage),
-    0x56 => LSR(zero_page_x, ZeroPageX),
-    0x4E => LSR(absolute, Absolute),
-    0x5E => LSR(absolute_x, AbsoluteX),
+    0x46 => LSR(zero_page, ZeroPage(..)),
+    0x56 => LSR(zero_page_x, ZeroPageX(..)),
+    0x4E => LSR(absolute, Absolute(..)),
+    0x5E => LSR(absolute_x, AbsoluteX(..)),
 
     // NOP
     0xEA => NOP(implied, Implied),
 
     // ORA
-    0x09 => ORA(immediate, Immediate),
-    0x05 => ORA(zero_page, ZeroPage),
-    0x15 => ORA(zero_page_x, ZeroPageX),
-    0x0D => ORA(absolute, Absolute),
-    0x1D => ORA(absolute_x, AbsoluteX),
-    0x19 => ORA(absolute_y, AbsoluteY),
-    0x01 => ORA(indirect_indexed, IndirectIndexed),
-    0x11 => ORA(indexed_indirect, IndexedIndirect),
+    0x09 => ORA(immediate, Immediate(..)),
+    0x05 => ORA(zero_page, ZeroPage(..)),
+    0x15 => ORA(zero_page_x, ZeroPageX(..)),
+    0x0D => ORA(absolute, Absolute(..)),
+    0x1D => ORA(absolute_x, AbsoluteX(..)),
+    0x19 => ORA(absolute_y, AbsoluteY(..)),
+    0x01 => ORA(indirect_indexed, IndirectIndexed(..)),
+    0x11 => ORA(indexed_indirect, IndexedIndirect(..)),
 
     // PHA
     0x48 => PHA(implied, Implied),
@@ -1002,17 +984,17 @@ implementation! {
 
     // ROL
     0x2A => ROL(accumulator, Accumulator),
-    0x26 => ROL(zero_page, ZeroPage),
-    0x36 => ROL(zero_page_x, ZeroPageX),
-    0x2E => ROL(absolute, Absolute),
-    0x3E => ROL(absolute_x, AbsoluteX),
+    0x26 => ROL(zero_page, ZeroPage(..)),
+    0x36 => ROL(zero_page_x, ZeroPageX(..)),
+    0x2E => ROL(absolute, Absolute(..)),
+    0x3E => ROL(absolute_x, AbsoluteX(..)),
 
     // ROR
     0x6A => ROR(accumulator, Accumulator),
-    0x66 => ROR(zero_page, ZeroPage),
-    0x76 => ROR(zero_page_x, ZeroPageX),
-    0x6E => ROR(absolute, Absolute),
-    0x7E => ROR(absolute_x, AbsoluteX),
+    0x66 => ROR(zero_page, ZeroPage(..)),
+    0x76 => ROR(zero_page_x, ZeroPageX(..)),
+    0x6E => ROR(absolute, Absolute(..)),
+    0x7E => ROR(absolute_x, AbsoluteX(..)),
 
     // RTI
     0x40 => RTI(implied, Implied),
@@ -1021,14 +1003,14 @@ implementation! {
     0x60 => RTS(implied, Implied),
 
     // SBC
-    0xE9 => SBC(immediate, Immediate),
-    0xE5 => SBC(zero_page, ZeroPage),
-    0xF5 => SBC(zero_page_x, ZeroPageX),
-    0xED => SBC(absolute, Absolute),
-    0xFD => SBC(absolute_x, AbsoluteX),
-    0xF9 => SBC(absolute_y, AbsoluteY),
-    0xE1 => SBC(indirect_indexed, IndirectIndexed),
-    0xF1 => SBC(indexed_indirect, IndexedIndirect),
+    0xE9 => SBC(immediate, Immediate(..)),
+    0xE5 => SBC(zero_page, ZeroPage(..)),
+    0xF5 => SBC(zero_page_x, ZeroPageX(..)),
+    0xED => SBC(absolute, Absolute(..)),
+    0xFD => SBC(absolute_x, AbsoluteX(..)),
+    0xF9 => SBC(absolute_y, AbsoluteY(..)),
+    0xE1 => SBC(indirect_indexed, IndirectIndexed(..)),
+    0xF1 => SBC(indexed_indirect, IndexedIndirect(..)),
 
     // SEC
     0x38 => SEC(implied, Implied),
@@ -1040,23 +1022,23 @@ implementation! {
     0x78 => SEI(implied, Implied),
 
     // STA
-    0x85 => STA(zero_page, ZeroPage),
-    0x95 => STA(zero_page_x, ZeroPageX),
-    0x8D => STA(absolute, Absolute),
-    0x9D => STA(absolute_x, AbsoluteX),
-    0x99 => STA(absolute_y, AbsoluteY),
-    0x81 => STA(indirect_indexed, IndirectIndexed),
-    0x91 => STA(indexed_indirect, IndexedIndirect),
+    0x85 => STA(zero_page, ZeroPage(..)),
+    0x95 => STA(zero_page_x, ZeroPageX(..)),
+    0x8D => STA(absolute, Absolute(..)),
+    0x9D => STA(absolute_x, AbsoluteX(..)),
+    0x99 => STA(absolute_y, AbsoluteY(..)),
+    0x81 => STA(indirect_indexed, IndirectIndexed(..)),
+    0x91 => STA(indexed_indirect, IndexedIndirect(..)),
 
     // STX
-    0x86 => STX(zero_page, ZeroPage),
-    0x96 => STX(zero_page_y, ZeroPageY),
-    0x8E => STX(absolute, Absolute),
+    0x86 => STX(zero_page, ZeroPage(..)),
+    0x96 => STX(zero_page_y, ZeroPageY(..)),
+    0x8E => STX(absolute, Absolute(..)),
 
     // STY
-    0x84 => STY(zero_page, ZeroPage),
-    0x94 => STY(zero_page_x, ZeroPageX),
-    0x8C => STY(absolute, Absolute),
+    0x84 => STY(zero_page, ZeroPage(..)),
+    0x94 => STY(zero_page_x, ZeroPageX(..)),
+    0x8C => STY(absolute, Absolute(..)),
 
     // TAX
     0xAA => TAX(implied, Implied),
