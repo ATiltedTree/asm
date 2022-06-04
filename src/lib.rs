@@ -21,7 +21,7 @@
 //!
 //! let mut encoder = _6502::Encoder::new(&mut assembly[..]);
 //!
-//! encoder.encode(_6502::Instruction::BRK(_6502::Addressing::Implied(())));
+//! encoder.encode(_6502::Instruction::BRK(_6502::Addressing::Implied));
 //! ```
 
 #![deny(missing_docs)]
