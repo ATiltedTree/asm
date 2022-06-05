@@ -1,8 +1,10 @@
+mod csr;
 mod decode;
 mod error;
 mod fence;
 mod inst;
 
+pub use csr::*;
 pub use decode::*;
 pub use error::*;
 pub use fence::*;

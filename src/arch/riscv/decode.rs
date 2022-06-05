@@ -1,4 +1,4 @@
-use super::{Error, Fence, Imm, Instruction, Register, Result};
+use super::{Csr, Error, Fence, Imm, Instruction, Register, Result};
 
 use std::io::Read;
 
@@ -19,6 +19,10 @@ impl<T: Read> Decoder<T> {
 
     fn rs2(inst: u32) -> Register {
         Register::from(((inst >> 20) & 0b11111) as u8)
+    }
+
+    fn csr(inst: u32) -> Csr {
+        Csr::from((inst >> 20) as u16)
     }
 
     fn r(
@@ -76,6 +80,22 @@ impl<T: Read> Decoder<T> {
 
         let imm = ((imm as i32) << 11) >> 11;
         Ok(f(Self::rd(inst), imm))
+    }
+
+    fn csr_reg(
+        inst: u32,
+        f: impl FnOnce(Register, Register, Csr) -> Instruction,
+    ) -> Result<Instruction> {
+        Ok(f(Self::rd(inst), Self::rs1(inst), Self::csr(inst)))
+    }
+
+    fn csr_imm(
+        inst: u32,
+        f: impl FnOnce(Register, u32, Csr) -> Instruction,
+    ) -> Result<Instruction> {
+        let imm = (inst >> 15) & 0b11111;
+
+        Ok(f(Self::rd(inst), imm, Self::csr(inst)))
     }
 }
 
@@ -193,6 +213,14 @@ impl<T: Read> crate::Decode for Decoder<T> {
             i!(0b0111011, 3: 0b001, 7: 0b0000000) => i!(r: SLLW),
             i!(0b0111011, 3: 0b101, 7: 0b0000000) => i!(r: SRLW),
             i!(0b0111011, 3: 0b101, 7: 0b0100000) => i!(r: SRAW),
+
+            // RV32/RV64 Zicsr
+            i!(0b1110011, 3: 0b001) => i!(csr_reg: CsrRw),
+            i!(0b1110011, 3: 0b010) => i!(csr_reg: CsrRs),
+            i!(0b1110011, 3: 0b011) => i!(csr_reg: CsrRc),
+            i!(0b1110011, 3: 0b101) => i!(csr_imm: CsrRwi),
+            i!(0b1110011, 3: 0b110) => i!(csr_imm: CsrRsi),
+            i!(0b1110011, 3: 0b111) => i!(csr_imm: CsrRci),
 
             _ => Err(Error::InvalidInstruction {
                 inst,

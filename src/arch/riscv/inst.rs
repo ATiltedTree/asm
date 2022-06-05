@@ -1,4 +1,4 @@
-use super::{Fence, Register};
+use super::{Csr, Fence, Register};
 
 pub type Imm = i32;
 
@@ -59,4 +59,12 @@ pub enum Instruction {
     SLLW(Register, Register, Register),
     SRLW(Register, Register, Register),
     SRAW(Register, Register, Register),
+
+    // RV32/RV64 Zicsr
+    CsrRw(Register, Register, Csr),
+    CsrRs(Register, Register, Csr),
+    CsrRc(Register, Register, Csr),
+    CsrRwi(Register, u32, Csr),
+    CsrRsi(Register, u32, Csr),
+    CsrRci(Register, u32, Csr),
 }
