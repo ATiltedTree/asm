@@ -222,6 +222,16 @@ impl<T: Read> crate::Decode for Decoder<T> {
             i!(0b1110011, 3: 0b110) => i!(csr_imm: CsrRsi),
             i!(0b1110011, 3: 0b111) => i!(csr_imm: CsrRci),
 
+            // RV32M
+            i!(0b0110011, 3: 0b000, 7: 0b0000001) => i!(r: Mul),
+            i!(0b0110011, 3: 0b001, 7: 0b0000001) => i!(r: Mulh),
+            i!(0b0110011, 3: 0b010, 7: 0b0000001) => i!(r: Mulhsu),
+            i!(0b0110011, 3: 0b011, 7: 0b0000001) => i!(r: Mulhu),
+            i!(0b0110011, 3: 0b100, 7: 0b0000001) => i!(r: Div),
+            i!(0b0110011, 3: 0b101, 7: 0b0000001) => i!(r: Divu),
+            i!(0b0110011, 3: 0b110, 7: 0b0000001) => i!(r: Rem),
+            i!(0b0110011, 3: 0b111, 7: 0b0000001) => i!(r: Remu),
+
             _ => Err(Error::InvalidInstruction {
                 inst,
                 opcode,

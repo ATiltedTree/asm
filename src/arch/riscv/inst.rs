@@ -67,4 +67,14 @@ pub enum Instruction {
     CsrRwi(Register, u32, Csr),
     CsrRsi(Register, u32, Csr),
     CsrRci(Register, u32, Csr),
+
+    // RV32M
+    Mul(Register, Register, Register),
+    Mulh(Register, Register, Register),
+    Mulhsu(Register, Register, Register),
+    Mulhu(Register, Register, Register),
+    Div(Register, Register, Register),
+    Divu(Register, Register, Register),
+    Rem(Register, Register, Register),
+    Remu(Register, Register, Register),
 }
