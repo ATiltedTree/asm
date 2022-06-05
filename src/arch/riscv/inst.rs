@@ -77,4 +77,11 @@ pub enum Instruction {
     Divu(Register, Register, Register),
     Rem(Register, Register, Register),
     Remu(Register, Register, Register),
+
+    // RV64M
+    Mulw(Register, Register, Register),
+    Divw(Register, Register, Register),
+    Divuw(Register, Register, Register),
+    Remw(Register, Register, Register),
+    Remuw(Register, Register, Register),
 }

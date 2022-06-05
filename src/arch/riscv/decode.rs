@@ -232,6 +232,13 @@ impl<T: Read> crate::Decode for Decoder<T> {
             i!(0b0110011, 3: 0b110, 7: 0b0000001) => i!(r: Rem),
             i!(0b0110011, 3: 0b111, 7: 0b0000001) => i!(r: Remu),
 
+            // RV64M
+            i!(0b0111011, 3: 0b000, 7: 0b0000001) => i!(r: Mulw),
+            i!(0b0111011, 3: 0b100, 7: 0b0000001) => i!(r: Divw),
+            i!(0b0111011, 3: 0b101, 7: 0b0000001) => i!(r: Divuw),
+            i!(0b0111011, 3: 0b110, 7: 0b0000001) => i!(r: Remw),
+            i!(0b0111011, 3: 0b111, 7: 0b0000001) => i!(r: Remuw),
+
             _ => Err(Error::InvalidInstruction {
                 inst,
                 opcode,
