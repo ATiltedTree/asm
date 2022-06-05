@@ -99,4 +99,17 @@ pub enum Instruction {
     AMOMaxW(Register, Register, Register, Ordering),
     AMOMinUW(Register, Register, Register, Ordering),
     AMOMaxUW(Register, Register, Register, Ordering),
+
+    // RV64A
+    LrD(Register, Register, Register, Ordering),
+    ScD(Register, Register, Register, Ordering),
+    AMOSwapD(Register, Register, Register, Ordering),
+    AMOAddD(Register, Register, Register, Ordering),
+    AMOXorD(Register, Register, Register, Ordering),
+    AMOAndD(Register, Register, Register, Ordering),
+    AMOOrD(Register, Register, Register, Ordering),
+    AMOMinD(Register, Register, Register, Ordering),
+    AMOMaxD(Register, Register, Register, Ordering),
+    AMOMinUD(Register, Register, Register, Ordering),
+    AMOMaxUD(Register, Register, Register, Ordering),
 }

@@ -275,6 +275,19 @@ impl<T: Read> crate::Decode for Decoder<T> {
             i!(0b0101111, 3: 0b010, 5: 0b11000) => i!(atomic: AMOMinUW),
             i!(0b0101111, 3: 0b010, 5: 0b11100) => i!(atomic: AMOMaxUW),
 
+            // RV64A
+            i!(0b0101111, 3: 0b011, 5: 0b00010) => i!(atomic: LrD),
+            i!(0b0101111, 3: 0b011, 5: 0b00011) => i!(atomic: ScD),
+            i!(0b0101111, 3: 0b011, 5: 0b00001) => i!(atomic: AMOSwapD),
+            i!(0b0101111, 3: 0b011, 5: 0b00000) => i!(atomic: AMOAddD),
+            i!(0b0101111, 3: 0b011, 5: 0b00100) => i!(atomic: AMOXorD),
+            i!(0b0101111, 3: 0b011, 5: 0b01100) => i!(atomic: AMOAndD),
+            i!(0b0101111, 3: 0b011, 5: 0b01000) => i!(atomic: AMOOrD),
+            i!(0b0101111, 3: 0b011, 5: 0b10000) => i!(atomic: AMOMinD),
+            i!(0b0101111, 3: 0b011, 5: 0b10100) => i!(atomic: AMOMaxD),
+            i!(0b0101111, 3: 0b011, 5: 0b11000) => i!(atomic: AMOMinUD),
+            i!(0b0101111, 3: 0b011, 5: 0b11100) => i!(atomic: AMOMaxUD),
+
             _ => Err(Error::InvalidInstruction {
                 inst,
                 opcode,
