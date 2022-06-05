@@ -1,0 +1,48 @@
+use super::{Fence, Register};
+
+pub type Imm = i32;
+
+#[derive(Debug)]
+pub enum Instruction {
+    // RV32I
+    Lui(Register, u32),
+    AuiPC(Register, u32),
+    Jal(Register, Imm),
+    Jalr(Register, Register, Imm),
+    Beq(Register, Register, Imm),
+    Bne(Register, Register, Imm),
+    Blt(Register, Register, Imm),
+    Bge(Register, Register, Imm),
+    Bltu(Register, Register, Imm),
+    Bgeu(Register, Register, Imm),
+    Lb(Register, Register, Imm),
+    Lh(Register, Register, Imm),
+    Lw(Register, Register, Imm),
+    Lbu(Register, Register, Imm),
+    Lhu(Register, Register, Imm),
+    Sb(Register, Register, Imm),
+    Sh(Register, Register, Imm),
+    Sw(Register, Register, Imm),
+    Addi(Register, Register, Imm),
+    Slti(Register, Register, Imm),
+    Sltiu(Register, Register, Imm),
+    Xori(Register, Register, Imm),
+    ORI(Register, Register, Imm),
+    ANDI(Register, Register, Imm),
+    SLLI(Register, Register, u8),
+    SRLI(Register, Register, u8),
+    SRAI(Register, Register, u8),
+    ADD(Register, Register, Register),
+    SUB(Register, Register, Register),
+    SLL(Register, Register, Register),
+    SLT(Register, Register, Register),
+    SLTU(Register, Register, Register),
+    XOR(Register, Register, Register),
+    SRL(Register, Register, Register),
+    SRA(Register, Register, Register),
+    OR(Register, Register, Register),
+    AND(Register, Register, Register),
+    FENCE(Fence),
+    ECALL,
+    EBREAK,
+}

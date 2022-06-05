@@ -15,6 +15,7 @@ all-features = true
 
 [features]
 6502 = []
+riscv = []
 
 [dependencies]
 bitflags = "1"
