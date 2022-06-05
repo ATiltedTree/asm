@@ -1,5 +1,7 @@
 use super::{Csr, Fence, Register};
 
+use std::sync::atomic::Ordering;
+
 pub type Imm = i32;
 
 #[derive(Debug)]
@@ -84,4 +86,17 @@ pub enum Instruction {
     Divuw(Register, Register, Register),
     Remw(Register, Register, Register),
     Remuw(Register, Register, Register),
+
+    // RV32A
+    LrW(Register, Register, Register, Ordering),
+    ScW(Register, Register, Register, Ordering),
+    AMOSwapW(Register, Register, Register, Ordering),
+    AMOAddW(Register, Register, Register, Ordering),
+    AMOXorW(Register, Register, Register, Ordering),
+    AMOAndW(Register, Register, Register, Ordering),
+    AMOOrW(Register, Register, Register, Ordering),
+    AMOMinW(Register, Register, Register, Ordering),
+    AMOMaxW(Register, Register, Register, Ordering),
+    AMOMinUW(Register, Register, Register, Ordering),
+    AMOMaxUW(Register, Register, Register, Ordering),
 }

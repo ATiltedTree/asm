@@ -1,6 +1,7 @@
 use super::{Csr, Error, Fence, Imm, Instruction, Register, Result};
 
 use std::io::Read;
+use std::sync::atomic::Ordering;
 
 pub struct Decoder<T: Read>(T);
 
@@ -96,6 +97,28 @@ impl<T: Read> Decoder<T> {
         let imm = (inst >> 15) & 0b11111;
 
         Ok(f(Self::rd(inst), imm, Self::csr(inst)))
+    }
+
+    fn atomic(
+        inst: u32,
+        f: impl FnOnce(Register, Register, Register, Ordering) -> Instruction,
+    ) -> Result<Instruction> {
+        let aq = ((inst >> 26) & 0b1) == 0b1;
+        let rl = ((inst >> 25) & 0b1) == 0b1;
+
+        let ordering = match (aq, rl) {
+            (true, true) => Ordering::SeqCst,
+            (true, false) => Ordering::Acquire,
+            (false, true) => Ordering::Release,
+            (false, false) => Ordering::Relaxed,
+        };
+
+        Ok(f(
+            Self::rd(inst),
+            Self::rs1(inst),
+            Self::rs2(inst),
+            ordering,
+        ))
     }
 }
 
@@ -238,6 +261,19 @@ impl<T: Read> crate::Decode for Decoder<T> {
             i!(0b0111011, 3: 0b101, 7: 0b0000001) => i!(r: Divuw),
             i!(0b0111011, 3: 0b110, 7: 0b0000001) => i!(r: Remw),
             i!(0b0111011, 3: 0b111, 7: 0b0000001) => i!(r: Remuw),
+
+            // RV32A
+            i!(0b0101111, 3: 0b010, 5: 0b00010) => i!(atomic: LrW),
+            i!(0b0101111, 3: 0b010, 5: 0b00011) => i!(atomic: ScW),
+            i!(0b0101111, 3: 0b010, 5: 0b00001) => i!(atomic: AMOSwapW),
+            i!(0b0101111, 3: 0b010, 5: 0b00000) => i!(atomic: AMOAddW),
+            i!(0b0101111, 3: 0b010, 5: 0b00100) => i!(atomic: AMOXorW),
+            i!(0b0101111, 3: 0b010, 5: 0b01100) => i!(atomic: AMOAndW),
+            i!(0b0101111, 3: 0b010, 5: 0b01000) => i!(atomic: AMOOrW),
+            i!(0b0101111, 3: 0b010, 5: 0b10000) => i!(atomic: AMOMinW),
+            i!(0b0101111, 3: 0b010, 5: 0b10100) => i!(atomic: AMOMaxW),
+            i!(0b0101111, 3: 0b010, 5: 0b11000) => i!(atomic: AMOMinUW),
+            i!(0b0101111, 3: 0b010, 5: 0b11100) => i!(atomic: AMOMaxUW),
 
             _ => Err(Error::InvalidInstruction {
                 inst,
