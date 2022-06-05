@@ -5,6 +5,9 @@
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
+/// Results returned by this [`Encoder`] and [`Decoder`]
+pub type Result<T> = std::result::Result<T, Error>;
+
 macro_rules! consume {
     ($reader:ident, $size:literal) => {{
         let mut buf = [0u8; $size];
@@ -261,7 +264,7 @@ impl Addressing {
         }
     }
 
-    fn encode(self, writer: &mut impl std::io::Write) -> Result<(), Error> {
+    fn encode(self, writer: &mut impl std::io::Write) -> Result<()> {
         match self {
             Addressing::Implied | Addressing::Accumulator => Ok(()),
             Addressing::Immediate(imm)
@@ -278,63 +281,63 @@ impl Addressing {
         }
     }
 
-    fn implied(_: &mut impl Read) -> Result<Self, Error> {
+    fn implied(_: &mut impl Read) -> Result<Self> {
         Ok(Self::Implied)
     }
-    fn accumulator(_: &mut impl Read) -> Result<Self, Error> {
+    fn accumulator(_: &mut impl Read) -> Result<Self> {
         Ok(Self::Accumulator)
     }
 
-    fn immediate(it: &mut impl Read) -> Result<Self, Error> {
+    fn immediate(it: &mut impl Read) -> Result<Self> {
         let imm = consume!(it, 1);
         imm.map(|x| Self::Immediate(x[0])).map_err(Error::IO)
     }
 
-    fn zero_page(it: &mut impl Read) -> Result<Self, Error> {
+    fn zero_page(it: &mut impl Read) -> Result<Self> {
         let imm = consume!(it, 1);
         imm.map(|x| Self::ZeroPage(x[0])).map_err(Error::IO)
     }
-    fn zero_page_x(it: &mut impl Read) -> Result<Self, Error> {
+    fn zero_page_x(it: &mut impl Read) -> Result<Self> {
         let imm = consume!(it, 1);
         imm.map(|x| Self::ZeroPageX(x[0])).map_err(Error::IO)
     }
-    fn zero_page_y(it: &mut impl Read) -> Result<Self, Error> {
+    fn zero_page_y(it: &mut impl Read) -> Result<Self> {
         let imm = consume!(it, 1);
         imm.map(|x| Self::ZeroPageY(x[0])).map_err(Error::IO)
     }
 
-    fn relative(it: &mut impl Read) -> Result<Self, Error> {
+    fn relative(it: &mut impl Read) -> Result<Self> {
         let imm = consume!(it, 1);
         imm.map(|x| Self::Relative(x[0])).map_err(Error::IO)
     }
 
-    fn absolute(it: &mut impl Read) -> Result<Self, Error> {
+    fn absolute(it: &mut impl Read) -> Result<Self> {
         let imm = consume!(it, 2);
         imm.map(|x| Self::Absolute(u16::from_le_bytes(x)))
             .map_err(Error::IO)
     }
-    fn absolute_x(it: &mut impl Read) -> Result<Self, Error> {
+    fn absolute_x(it: &mut impl Read) -> Result<Self> {
         let imm = consume!(it, 2);
         imm.map(|x| Self::AbsoluteX(u16::from_le_bytes(x)))
             .map_err(Error::IO)
     }
-    fn absolute_y(it: &mut impl Read) -> Result<Self, Error> {
+    fn absolute_y(it: &mut impl Read) -> Result<Self> {
         let imm = consume!(it, 2);
         imm.map(|x| Self::AbsoluteY(u16::from_le_bytes(x)))
             .map_err(Error::IO)
     }
 
-    fn indirect(it: &mut impl Read) -> Result<Self, Error> {
+    fn indirect(it: &mut impl Read) -> Result<Self> {
         let imm = consume!(it, 2);
         imm.map(|x| Self::Indirect(u16::from_le_bytes(x)))
             .map_err(Error::IO)
     }
 
-    fn indexed_indirect(it: &mut impl Read) -> Result<Self, Error> {
+    fn indexed_indirect(it: &mut impl Read) -> Result<Self> {
         let imm = consume!(it, 1);
         imm.map(|x| Self::IndexedIndirect(x[0])).map_err(Error::IO)
     }
-    fn indirect_indexed(it: &mut impl Read) -> Result<Self, Error> {
+    fn indirect_indexed(it: &mut impl Read) -> Result<Self> {
         let imm = consume!(it, 1);
         imm.map(|x| Self::IndirectIndexed(x[0])).map_err(Error::IO)
     }
@@ -732,7 +735,7 @@ impl<T: Read> crate::Decode for Decoder<T> {
     type Instruction = Instruction;
     type Error = Error;
 
-    fn decode(&mut self) -> Result<Self::Instruction, Self::Error> {
+    fn decode(&mut self) -> Result<Self::Instruction> {
         let mut opcode = [0u8];
         self.0.read_exact(&mut opcode).map_err(Error::IO)?;
 
@@ -741,11 +744,11 @@ impl<T: Read> crate::Decode for Decoder<T> {
 }
 
 impl<T: Read + Seek> crate::decode::Seek for Decoder<T> {
-    fn seek_bytes(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
+    fn seek_bytes(&mut self, pos: SeekFrom) -> Result<u64> {
         self.0.seek(pos).map_err(Error::IO)
     }
 
-    fn seek_insts(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
+    fn seek_insts(&mut self, pos: SeekFrom) -> Result<u64> {
         // Instructions are always one byte in length, just pass the seek through
         self.0.seek(pos).map_err(Error::IO)
     }
@@ -765,14 +768,14 @@ impl<T: Write> crate::Encode for Encoder<T> {
     type Instruction = Instruction;
     type Error = Error;
 
-    fn encode(&mut self, inst: Self::Instruction) -> Result<(), Self::Error> {
+    fn encode(&mut self, inst: Self::Instruction) -> Result<()> {
         inst_to_op(inst, &mut self.0)
     }
 }
 
 macro_rules! implementation {
     ($($op:literal => $inst:ident($dec:ident, $enc:pat)),+,) => {
-        fn op_to_inst<R: Read>(op: u8, reader: &mut R) -> Result<Instruction, Error> {
+        fn op_to_inst<R: Read>(op: u8, reader: &mut R) -> Result<Instruction> {
           match op {
                 $(
                     $op => Addressing::$dec(reader).map(Instruction::$inst)
@@ -781,7 +784,7 @@ macro_rules! implementation {
             }
         }
 
-        fn inst_to_op<W: Write>(inst: Instruction, writer: &mut W) -> Result<(), Error> {
+        fn inst_to_op<W: Write>(inst: Instruction, writer: &mut W) -> Result<()> {
             use Addressing::*;
             let op = match &inst {
                 $(Instruction::$inst($enc) => $op,)+
