@@ -177,6 +177,23 @@ impl<T: Read> crate::Decode for Decoder<T> {
                 true => Ok(Instruction::EBREAK),
             },
 
+            // RV64I
+            i!(0b0000011, 3: 0b110) => i!(i: Lwu),
+            i!(0b0000011, 3: 0b011) => i!(i: Ld),
+            i!(0b0100011, 3: 0b011) => i!(s: Sd),
+            i!(0b0010011, 3: 0b001, 7: 0b0000001) => i!(shift: SLLI),
+            i!(0b0010011, 3: 0b101, 7: 0b0000001) => i!(shift: SRLI),
+            i!(0b0010011, 3: 0b101, 7: 0b0100001) => i!(shift: SRAI),
+            i!(0b0011011, 3: 0b000) => i!(i: Addiw),
+            i!(0b0011011, 3: 0b001, 7: 0b0000000) => i!(shift: SLLIW),
+            i!(0b0011011, 3: 0b101, 7: 0b0000000) => i!(shift: SRLIW),
+            i!(0b0011011, 3: 0b101, 7: 0b0100000) => i!(shift: SRAIW),
+            i!(0b0111011, 3: 0b000, 7: 0b0000000) => i!(r: ADDW),
+            i!(0b0111011, 3: 0b000, 7: 0b0100000) => i!(r: SUBW),
+            i!(0b0111011, 3: 0b001, 7: 0b0000000) => i!(r: SLLW),
+            i!(0b0111011, 3: 0b101, 7: 0b0000000) => i!(r: SRLW),
+            i!(0b0111011, 3: 0b101, 7: 0b0100000) => i!(r: SRAW),
+
             _ => Err(Error::InvalidInstruction {
                 inst,
                 opcode,

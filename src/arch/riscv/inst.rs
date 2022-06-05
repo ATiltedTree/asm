@@ -45,4 +45,18 @@ pub enum Instruction {
     FENCE(Fence),
     ECALL,
     EBREAK,
+
+    // RV64I
+    Lwu(Register, Register, Imm),
+    Ld(Register, Register, Imm),
+    Sd(Register, Register, Imm),
+    Addiw(Register, Register, Imm),
+    SLLIW(Register, Register, u8),
+    SRLIW(Register, Register, u8),
+    SRAIW(Register, Register, u8),
+    ADDW(Register, Register, Register),
+    SUBW(Register, Register, Register),
+    SLLW(Register, Register, Register),
+    SRLW(Register, Register, Register),
+    SRAW(Register, Register, Register),
 }
