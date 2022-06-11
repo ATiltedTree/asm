@@ -19,3 +19,6 @@ all-features = true
 [dependencies]
 bitflags = "1"
 thiserror = "1.0.30"
+
+[dev-dependencies]
+asm = { path = ".", features = ["6502"] }
