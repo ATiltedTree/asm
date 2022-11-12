@@ -163,6 +163,20 @@ bitflags::bitflags! {
     }
 }
 
+/// The 6502 processor has serveral variants that expand upon its instruction
+/// set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Variant {
+    /// The default 6502 instruction set
+    _6502,
+
+    /// [65C02](https://en.wikipedia.org/wiki/WDC_65C02)
+    _65C02,
+
+    /// [65CE02](https://en.wikipedia.org/wiki/CSG_65CE02)
+    _65CE02,
+}
+
 /// The 6502 processor provides several ways in which memory locations can be
 /// addressed.
 ///
@@ -243,6 +257,19 @@ pub enum Addressing {
     /// significant byte of 16 bit address. The Y register is dynamically added
     /// to this value to generated the actual target address for operation.
     IndirectIndexed(u8),
+
+    /// TODO
+    NonIndexedIndirect(u8),
+
+    /// As would be expected, the X register is added to the absolute address,
+    /// and the resulting address contains the address to jump to, low byte
+    /// first. For example, if X is $FF, memory location $1456 contains $CD,
+    /// and memory location $1457 contains $AB, then JMP ($1357,X) will jump to
+    /// $ABCD.
+    ///
+    /// This addressing mode is useful for creating jump tables, particularly
+    /// with ROM-based code.
+    JumpTable(u16),
 }
 
 impl Addressing {
@@ -256,11 +283,13 @@ impl Addressing {
             | Addressing::ZeroPageY(_)
             | Addressing::Relative(_)
             | Addressing::IndexedIndirect(_)
-            | Addressing::IndirectIndexed(_) => 1,
+            | Addressing::IndirectIndexed(_)
+            | Addressing::NonIndexedIndirect(_) => 1,
             Addressing::Absolute(_)
             | Addressing::AbsoluteX(_)
             | Addressing::AbsoluteY(_)
-            | Addressing::Indirect(_) => 2,
+            | Addressing::Indirect(_)
+            | Addressing::JumpTable(_) => 2,
         }
     }
 
@@ -273,11 +302,13 @@ impl Addressing {
             | Addressing::ZeroPageY(imm)
             | Addressing::Relative(imm)
             | Addressing::IndexedIndirect(imm)
-            | Addressing::IndirectIndexed(imm) => writer.write_all(&[imm]).map_err(Error::IO),
+            | Addressing::IndirectIndexed(imm)
+            | Addressing::NonIndexedIndirect(imm) => writer.write_all(&[imm]).map_err(Error::IO),
             Addressing::Absolute(imm)
             | Addressing::AbsoluteX(imm)
             | Addressing::AbsoluteY(imm)
-            | Addressing::Indirect(imm) => writer.write_all(&imm.to_le_bytes()).map_err(Error::IO),
+            | Addressing::Indirect(imm)
+            | Addressing::JumpTable(imm) => writer.write_all(&imm.to_le_bytes()).map_err(Error::IO),
         }
     }
 
@@ -340,6 +371,17 @@ impl Addressing {
     fn indirect_indexed(it: &mut impl Read) -> Result<Self> {
         let imm = consume!(it, 1);
         imm.map(|x| Self::IndirectIndexed(x[0])).map_err(Error::IO)
+    }
+    fn non_indexed_indirect(it: &mut impl Read) -> Result<Self> {
+        let imm = consume!(it, 1);
+        imm.map(|x| Self::NonIndexedIndirect(x[0]))
+            .map_err(Error::IO)
+    }
+
+    fn jump_table(it: &mut impl Read) -> Result<Self> {
+        let imm = consume!(it, 2);
+        imm.map(|x| Self::JumpTable(u16::from_le_bytes(x)))
+            .map_err(Error::IO)
     }
 }
 
@@ -720,15 +762,18 @@ inst! {
     /// Copies the current contents of the Y register into the accumulator and
     /// sets the zero and negative flags as appropriate.
     TYA,
+
+    /// # Branch Always
+    BRA,
 }
 
 /// A decoder for 6502 instructions
-pub struct Decoder<T: Read>(T);
+pub struct Decoder<T: Read>(T, Variant);
 
 impl<T: Read> Decoder<T> {
     /// Create a new decoder from a byte stream
     pub fn new(inner: T) -> Self {
-        Self(inner)
+        Self(inner, Variant::_6502)
     }
 }
 impl<T: Read> crate::Decode for Decoder<T> {
@@ -739,7 +784,7 @@ impl<T: Read> crate::Decode for Decoder<T> {
         let mut opcode = [0u8];
         self.0.read_exact(&mut opcode).map_err(Error::IO)?;
 
-        op_to_inst(opcode[0], &mut self.0)
+        op_to_inst(opcode[0], &mut self.0, self.1)
     }
 }
 
@@ -755,12 +800,12 @@ impl<T: Read + Seek> crate::decode::Seek for Decoder<T> {
 }
 
 /// A encoder for 6502 instructions
-pub struct Encoder<T: Write>(T);
+pub struct Encoder<T: Write>(T, Variant);
 
 impl<T: Write> Encoder<T> {
     /// Create a new encoder from a writer
     pub fn new(inner: T) -> Self {
-        Self(inner)
+        Self(inner, Variant::_6502)
     }
 }
 
@@ -769,25 +814,25 @@ impl<T: Write> crate::Encode for Encoder<T> {
     type Error = Error;
 
     fn encode(&mut self, inst: Self::Instruction) -> Result<()> {
-        inst_to_op(inst, &mut self.0)
+        inst_to_op(inst, &mut self.0, self.1)
     }
 }
 
 macro_rules! implementation {
-    ($($op:literal => $inst:ident($dec:ident, $enc:pat)),+,) => {
-        fn op_to_inst<R: Read>(op: u8, reader: &mut R) -> Result<Instruction> {
+    ($($(#[on($on:pat)])? $op:literal => $inst:ident($dec:ident, $enc:pat)),+,) => {
+        fn op_to_inst<R: Read>(op: u8, reader: &mut R, variant: Variant) -> Result<Instruction> {
           match op {
                 $(
-                    $op => Addressing::$dec(reader).map(Instruction::$inst)
+                    $op $(if matches!(variant, $on) )? => Addressing::$dec(reader).map(Instruction::$inst)
                 ),+,
                 x => Err(Error::InvalidOpcode(x)),
             }
         }
 
-        fn inst_to_op<W: Write>(inst: Instruction, writer: &mut W) -> Result<()> {
+        fn inst_to_op<W: Write>(inst: Instruction, writer: &mut W, variant: Variant) -> Result<()> {
             use Addressing::*;
             let op = match &inst {
-                $(Instruction::$inst($enc) => $op,)+
+                $(Instruction::$inst($enc) $(if matches!(variant, $on))? => $op,)+
                 other => return Err(Error::InvalidAddressing(*other)),
             };
             writer.write_all(&[op]).map_err(Error::IO)?;
@@ -807,6 +852,8 @@ implementation! {
     0x79 => ADC(absolute_y, AbsoluteY(..)),
     0x61 => ADC(indexed_indirect, IndexedIndirect(..)),
     0x71 => ADC(indirect_indexed, IndirectIndexed(..)),
+    #[on(Variant::_65C02)]
+    0x72 => ADC(non_indexed_indirect, NonIndexedIndirect(..)),
 
     // AND
     0x29 => AND(immediate, Immediate(..)),
@@ -817,6 +864,8 @@ implementation! {
     0x39 => AND(absolute_y, AbsoluteY(..)),
     0x21 => AND(indexed_indirect, IndexedIndirect(..)),
     0x31 => AND(indirect_indexed, IndirectIndexed(..)),
+    #[on(Variant::_65C02)]
+    0x32 => AND(non_indexed_indirect, NonIndexedIndirect(..)),
 
     // ASL
     0x0A => ASL(accumulator, Accumulator),
@@ -837,6 +886,12 @@ implementation! {
     // BIT
     0x24 => BIT(zero_page, ZeroPage(..)),
     0x2C => BIT(absolute, Absolute(..)),
+    #[on(Variant::_65C02)]
+    0x89 => BIT(immediate, Immediate(..)),
+    #[on(Variant::_65C02)]
+    0x34 => BIT(zero_page_x, ZeroPageX(..)),
+    #[on(Variant::_65C02)]
+    0x3C => BIT(absolute_x, AbsoluteX(..)),
 
     // BMI
     0x30 => BMI(relative, Relative(..)),
@@ -877,6 +932,8 @@ implementation! {
     0xD9 => CMP(absolute_y, AbsoluteY(..)),
     0xC1 => CMP(indirect_indexed, IndirectIndexed(..)),
     0xD1 => CMP(indexed_indirect, IndexedIndirect(..)),
+    #[on(Variant::_65C02)]
+    0xD2 => CMP(non_indexed_indirect, NonIndexedIndirect(..)),
 
     // CPX
     0xE0 => CPX(immediate, Immediate(..)),
@@ -893,6 +950,8 @@ implementation! {
     0xD6 => DEC(zero_page_x, ZeroPageX(..)),
     0xCE => DEC(absolute, Absolute(..)),
     0xDE => DEC(absolute_x, AbsoluteX(..)),
+    #[on(Variant::_65C02)]
+    0x3A => DEC(accumulator, Accumulator),
 
     // DEX
     0xCA => DEX(implied, Implied),
@@ -909,12 +968,16 @@ implementation! {
     0x59 => EOR(absolute_y, AbsoluteY(..)),
     0x41 => EOR(indirect_indexed, IndirectIndexed(..)),
     0x51 => EOR(indexed_indirect, IndexedIndirect(..)),
+    #[on(Variant::_65C02)]
+    0x52 => EOR(non_indexed_indirect, NonIndexedIndirect(..)),
 
     // INC
     0xE6 => INC(zero_page, ZeroPage(..)),
     0xF6 => INC(zero_page_x, ZeroPageX(..)),
     0xEE => INC(absolute, Absolute(..)),
     0xFE => INC(absolute_x, AbsoluteX(..)),
+    #[on(Variant::_65C02)]
+    0x1A => INC(accumulator, Accumulator),
 
     // INX
     0xE8 => INX(implied, Implied),
@@ -925,6 +988,8 @@ implementation! {
     // JMP
     0x4C => JMP(absolute, Absolute(..)),
     0x6C => JMP(indirect, Indirect(..)),
+    #[on(Variant::_65C02)]
+    0x7C => JMP(jump_table, JumpTable(..)),
 
     // JSR
     0x20 => JSR(absolute, Absolute(..)),
@@ -938,6 +1003,8 @@ implementation! {
     0xB9 => LDA(absolute_y, AbsoluteY(..)),
     0xA1 => LDA(indirect_indexed, IndirectIndexed(..)),
     0xB1 => LDA(indexed_indirect, IndexedIndirect(..)),
+    #[on(Variant::_65C02)]
+    0xB2 => LDA(non_indexed_indirect, NonIndexedIndirect(..)),
 
     // LDX
     0xA2 => LDX(immediate, Immediate(..)),
@@ -972,6 +1039,8 @@ implementation! {
     0x19 => ORA(absolute_y, AbsoluteY(..)),
     0x01 => ORA(indirect_indexed, IndirectIndexed(..)),
     0x11 => ORA(indexed_indirect, IndexedIndirect(..)),
+    #[on(Variant::_65C02)]
+    0x12 => ORA(non_indexed_indirect, NonIndexedIndirect(..)),
 
     // PHA
     0x48 => PHA(implied, Implied),
@@ -1014,6 +1083,8 @@ implementation! {
     0xF9 => SBC(absolute_y, AbsoluteY(..)),
     0xE1 => SBC(indirect_indexed, IndirectIndexed(..)),
     0xF1 => SBC(indexed_indirect, IndexedIndirect(..)),
+    #[on(Variant::_65C02)]
+    0xF2 => SBC(non_indexed_indirect, NonIndexedIndirect(..)),
 
     // SEC
     0x38 => SEC(implied, Implied),
@@ -1032,6 +1103,8 @@ implementation! {
     0x99 => STA(absolute_y, AbsoluteY(..)),
     0x81 => STA(indirect_indexed, IndirectIndexed(..)),
     0x91 => STA(indexed_indirect, IndexedIndirect(..)),
+    #[on(Variant::_65C02)]
+    0x92 => STA(non_indexed_indirect, NonIndexedIndirect(..)),
 
     // STX
     0x86 => STX(zero_page, ZeroPage(..)),
@@ -1060,4 +1133,8 @@ implementation! {
 
     // TYA
     0x98 => TYA(implied, Implied),
+
+    // BRA
+    #[on(Variant::_65C02)]
+    0x80 => BRA(relative, Relative(..)),
 }
