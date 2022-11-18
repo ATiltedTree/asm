@@ -36,7 +36,7 @@ jobs:
           profile: minimal
           components: clippy
       - name: Setup | Cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
       - name: Check | Lint
         uses: actions-rs/cargo@v1.0.3
         with:
@@ -55,7 +55,7 @@ jobs:
           override: true
           profile: minimal
       - name: Setup | Cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
       - name: Check | Doc
         uses: actions-rs/cargo@v1.0.3
         with:
@@ -75,6 +75,6 @@ jobs:
           override: true
           profile: minimal
       - name: Setup | Cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
       - name: Build | Test
         run: cargo test
